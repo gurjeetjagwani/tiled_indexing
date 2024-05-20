@@ -64,7 +64,6 @@ static void gen_data(
             }
         }
     }
-    return vis;
 }
 template<typename T, typename F>
 static void tile_count_for_indexing( 
