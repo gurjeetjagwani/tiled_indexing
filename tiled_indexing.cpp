@@ -33,9 +33,9 @@ void prefix_sum(
 
 template<typename T, typename F>
 static void gen_data(
-    T num_baselines, 
-    T num_channels, 
-    T num_times, 
+    const T num_baselines, 
+    const T num_channels, 
+    const T num_times, 
     std::vector<F> vis,
     std::vector<F> weights, 
     std::vector<F> uvw,
@@ -67,21 +67,23 @@ static void gen_data(
 }
 template<typename T, typename F>
 static void tile_count_for_indexing( 
-    T grid_size, 
-    T support,
-    T num_channels, 
-    T num_baselines,  
-    T num_times,
-    T top_left_u, 
-    T top_left_v,
-    T tile_size_u,
-    F inv_tile_size_u, 
-    F inv_tile_size_v, 
+    const T grid_size, 
+    const T support,
+    const T num_channels, 
+    const T num_baselines,  
+    const T num_times,
+    const T top_left_u, 
+    const T top_left_v,
+    const T tile_size_u,
+    const F inv_tile_size_u, 
+    const F inv_tile_size_v,
+    const F cell_size_rad, 
     std::vector<T> num_points_in_tile,
-    std::vector<F> uv
+    const std::vector<F> uv
 )
 {
     T grid_centre = grid_size / 2;
+    F grid_scale = grid_size * cell_size_rad;
     for (T i = 0; i < num_times; i++)
     {
         for(T k = 0; i < num_baselines; k++)
@@ -91,32 +93,38 @@ static void tile_count_for_indexing(
            for(int j=0; j < num_channels; j++)
             { 
 
-                T inv_wavelength = freqs[j] / 299792458.0;  
-                T grid_u = round(i_u) * inv_wavelength + grid_centre;
-                T grid_v = round(i_v) * inv_wavelength + grid_centre;
-            
-                if(grid_u + support < grid_size && grid_v + support < grid_size)
-                {
-                    T min_support_u, min_support_v, max_support_v, max_support_u;
-                    T rel_u = grid_u - top_left_u;
-                    T rel_v = grid_v - top_left_v;
-                    const float u1 = (float) (rel_u - support) * inv_tile_size_u;
-                    const float u2 = (float) (rel_v + support + 1) * inv_tile_size_v;
-                    const float v1 = (float) (rel_v - support) * inv_tile_size_v;
-                    const float v2 = (float) (rel_v + support + 1) * inv_tile_size_v;
-                    min_support_u = (int) (floor(u1));
-                    min_support_v = (int) (floor(v1));
-                    max_support_u = (int) (ceil(u2));
-                    max_support_v = (int) (ceil(v2));
-                    for (T pv = min_support_v; pv < max_support_v; pv++)
-                    {
-                        for(T pu = min_support_u; pu < max_support_u; pu++)
-                        {
-                            num_points_in_tile +=  pu * tile_size_u + pv;  
-                        }
-                    } 
-                }
+                F inv_wavelength = freqs[j] / 299792458.0;  
+                F pos_u = i_u * inv_wavelength * grid_centre;
+                F pos_v = i_v * inv_wavelength * grid_centre;
 
+                for (int l = 0; l < num_pol; l++)
+                {
+                    T grid_u = round(pos_u) + grid_centre;
+                    T grid_v = round(pos_v) + grid_centre; 
+                    if(grid_u + support < grid_size && grid_v + support < grid_size)
+                    {
+                        T min_support_u, min_support_v, max_support_v, max_support_u;
+                        T rel_u = grid_u - top_left_u;
+                        T rel_v = grid_v - top_left_v;
+                        const float u1 = (float) (rel_u - support) * inv_tile_size_u;
+                        const float u2 = (float) (rel_v + support + 1) * inv_tile_size_v;
+                        const float v1 = (float) (rel_v - support) * inv_tile_size_v;
+                        const float v2 = (float) (rel_v + support + 1) * inv_tile_size_v;
+                        min_support_u = (int) (floor(u1));
+                        min_support_v = (int) (floor(v1));
+                        max_support_u = (int) (ceil(u2));
+                        max_support_v = (int) (ceil(v2));
+                        for (T pv = min_support_v; pv < max_support_v; pv++)
+                        {
+                            for(T pu = min_support_u; pu < max_support_u; pu++)
+                            {
+                                num_points_in_tile +=  pu * tile_size_u + pv;  
+                            }
+                        } 
+                    }
+        
+                }
+               
             }
         }
     }
@@ -124,24 +132,26 @@ static void tile_count_for_indexing(
 
 template<typename T, typename F>
 static void bucket_sorted_indexing( 
-    T grid_size, 
-    T support,
-    T top_left_u,
-    T top_left_v,
-    T num_tiles_u,
-    const float inv_tile_size_u,
-    const float inv_tile_size_v,
-    T num_channels, 
-    T num_baselines,  
-    T num_times,
-    std::vector<F> uvw,
-    std::vector<F> freqs,
-    std::vector<F> vis, 
-    std::vector<T> tile_offsets,
+    const T grid_size, 
+    const T support,
+    const T top_left_u,
+    const T top_left_v,
+    const T num_tiles_u,
+    const F cell_size_rad,
+    const F inv_tile_size_u,
+    const F inv_tile_size_v,
+    const T num_channels, 
+    const T num_baselines,  
+    const T num_times,
+    const std::vector<F> uvw,
+    const std::vector<F> freqs,
+    const std::vector<F> vis, 
+    const std::vector<T> tile_offsets,
     std::vector<T> sorted_vis_index
 )
 {
     T grid_centre = grid_size / 2;
+    F grid_scale = grid_size * cell_size_rad;
     for (int i = 0; i < num_times; i++)
     {
         for(int k = 0; i < num_baselines; k++)
@@ -151,13 +161,15 @@ static void bucket_sorted_indexing(
             
             for(int j=0; j < num_channels; j++)
             {
-                T inv_wavelength = freqs[j] / 299792458.0;  
-                T grid_u = round(i_u) * inv_wavelength + grid_centre; 
-                T grid_v = round(i_v) * inv_wavelength + grid_centre;
+                F inv_wavelength = freqs[j] / 299792458.0;  
+                F pos_u = i_u * inv_wavelength * grid_scale; 
+                F pos_v = i_v * inv_wavelength * grid_scale;
 
                 for(int l =0; l < num_pol; l++)
                 {
                     T i_vis = INDEX_4D(num_times, num_baselines, num_channels, num_pol, i, k, j, l);
+                    T grid_u = round(pos_u) + grid_centre;
+                    T grid_v = round(pos_v) + grid_centre; 
                     if(grid_u + support < grid_size && grid_v + support < grid_size)
                     {
                         T min_support_u, min_support_v, max_support_v, max_support_u;
@@ -201,6 +213,7 @@ int main()
     std::vector<double> weights;
     gen_data<int, double>(baselines,channels,times,vis,weights,uvw,freqs);
     //Define parameters for the grid and tiles
+    float cell_size_rad = 0.0001;
     int grid_size = 1024;
     int grid_centre = grid_centre / 2;
     int tile_size_u = 32;
@@ -222,7 +235,7 @@ int main()
     std::vector<int> num_points_in_tile;
     std::vector<int> sorted_vis_index;
     std::vector<int> tile_offsets;
-    tile_count_for_indexing<int, double>(grid_size, support, channels, baselines, times, top_left_u, top_left_v, tile_size_u, inv_tile_size_u, inv_tile_size_v, num_points_in_tile, uvw);
+    tile_count_for_indexing<int, double>(grid_size, support, channels, baselines, times, top_left_u, top_left_v, tile_size_u, inv_tile_size_u, inv_tile_size_v, cell_size_rad, num_points_in_tile, uvw);
     prefix_sum<int>(num_tiles, num_points_in_tile.data(), tile_offsets.data());
-    bucket_sorted_indexing<int, double>(grid_size, support, top_left_u, top_left_v, num_tiles_u, inv_tile_size_u, inv_tile_size_v, channels, baselines, times, uvw, freqs, vis, tile_offsets, sorted_vis_index);
+    bucket_sorted_indexing<int, double>(grid_size, support, top_left_u, top_left_v, num_tiles_u, cell_size_rad, inv_tile_size_u, inv_tile_size_v, channels, baselines, times, uvw, freqs, vis, tile_offsets, sorted_vis_index);
 }
