@@ -36,30 +36,31 @@ static void gen_data(
     const T num_baselines, 
     const T num_channels, 
     const T num_times, 
-    std::vector<F> vis,
-    std::vector<F> weights, 
-    std::vector<F> uvw,
-    std::vector<F> freqs
+    std::vector<F>& vis,
+    std::vector<F>& weights, 
+    std::vector<F>& uvw,
+    std::vector<F>& freqs
 )
 {
+    for (T l = 0; l < num_channels; l++)
+    {
+        freqs[l] = 1e9 + l * 1e6;               
+    }
     for (T i = 0; i < num_times; i++)
     {
         for(T k = 0; k < num_baselines; k++)
-        {
-            T i_u = INDEX_3D(num_times, num_baselines,3 ,i, k, 0);
-            T i_v = INDEX_3D(num_times, num_baselines,3 ,i, k, 1);
-                
+        {        
+            int i_u = INDEX_3D (num_times, num_baselines, 3, i, k, 0);
+            int i_v = INDEX_3D (num_times, num_baselines, 3, i, k, 1);
+            uvw[i_u] = (double)rand() / (double) RAND_MAX;
+            uvw[i_v] = (double)rand() / (double) RAND_MAX; 
+             
             for (T l = 0; l < num_channels; l++)
-            {
-                freqs[l] = 1e9 + l * 1e6;               
-                uvw[i_u] = (double)rand() / (double) RAND_MAX;
-                uvw[i_v] = (double)rand() / (double) RAND_MAX; 
-                
+            {  
                 for (T j = 0; j < num_pol; j++)
                 {
-                    T i_vis = INDEX_4D(num_times, num_baselines, num_channels, num_pol, i, k, l, j);
-                    vis[i_vis] = 1.0;
-                    weights[i_vis] = 1.0; 
+                    vis[j] = 1.0;
+                    weights[j] = 1.0; 
                 }
             }
         }
@@ -77,7 +78,9 @@ static void tile_count_for_indexing(
     const T tile_size_u,
     const F inv_tile_size_u, 
     const F inv_tile_size_v,
-    const F cell_size_rad, 
+    const F cell_size_rad,
+    std::vector<F> freqs,
+    std::vector<T> num_skipped,
     std::vector<T> num_points_in_tile,
     const std::vector<F> uv
 )
@@ -94,8 +97,8 @@ static void tile_count_for_indexing(
             { 
 
                 F inv_wavelength = freqs[j] / 299792458.0;  
-                F pos_u = i_u * inv_wavelength * grid_centre;
-                F pos_v = i_v * inv_wavelength * grid_centre;
+                F pos_u = i_u * inv_wavelength * grid_scale;
+                F pos_v = i_v * inv_wavelength * grid_scale;
 
                 for (int l = 0; l < num_pol; l++)
                 {
@@ -106,10 +109,10 @@ static void tile_count_for_indexing(
                         T min_support_u, min_support_v, max_support_v, max_support_u;
                         T rel_u = grid_u - top_left_u;
                         T rel_v = grid_v - top_left_v;
-                        const float u1 = (float) (rel_u - support) * inv_tile_size_u;
-                        const float u2 = (float) (rel_v + support + 1) * inv_tile_size_v;
-                        const float v1 = (float) (rel_v - support) * inv_tile_size_v;
-                        const float v2 = (float) (rel_v + support + 1) * inv_tile_size_v;
+                        const F u1 = (F) (rel_u - support) * inv_tile_size_u;
+                        const F u2 = (F) (rel_v + support + 1) * inv_tile_size_v;
+                        const F v1 = (F) (rel_v - support) * inv_tile_size_v;
+                        const F v2 = (F) (rel_v + support + 1) * inv_tile_size_v;
                         min_support_u = (int) (floor(u1));
                         min_support_v = (int) (floor(v1));
                         max_support_u = (int) (ceil(u2));
@@ -118,10 +121,13 @@ static void tile_count_for_indexing(
                         {
                             for(T pu = min_support_u; pu < max_support_u; pu++)
                             {
-                                num_points_in_tile +=  pu * tile_size_u + pv;  
+                                num_points_in_tile[pu * tile_size_u + pv] += 1;    
                             }
                         } 
                     }
+                    else{
+                       num_skipped[0] += 1; 
+                    } 
         
                 }
                
@@ -146,7 +152,7 @@ static void bucket_sorted_indexing(
     const std::vector<F> uvw,
     const std::vector<F> freqs,
     const std::vector<F> vis, 
-    const std::vector<T> tile_offsets,
+    std::vector<T> tile_offsets,
     std::vector<T> sorted_vis_index
 )
 {
@@ -207,15 +213,15 @@ int main()
     int baselines = stations * (stations -1);
     int channels = 30;
     int times = 1;
-    std::vector<double> freqs;
-    std::vector<double> uvw;
-    std::vector<double> vis;
-    std::vector<double> weights;
+    std::vector<double> freqs(channels);
+    std::vector<double> uvw (baselines * times * 3);
+    std::vector<double> vis (baselines * times * channels * num_pol);
+    std::vector<double> weights (baselines * times * channels * num_pol);
     gen_data<int, double>(baselines,channels,times,vis,weights,uvw,freqs);
     //Define parameters for the grid and tiles
     float cell_size_rad = 0.0001;
-    int grid_size = 1024;
-    int grid_centre = grid_centre / 2;
+    int grid_size = 2048;
+    int grid_centre = grid_size / 2;
     int tile_size_u = 32;
     int tile_size_v = 16;
     int support = 3;
@@ -235,7 +241,8 @@ int main()
     std::vector<int> num_points_in_tile;
     std::vector<int> sorted_vis_index;
     std::vector<int> tile_offsets;
-    tile_count_for_indexing<int, double>(grid_size, support, channels, baselines, times, top_left_u, top_left_v, tile_size_u, inv_tile_size_u, inv_tile_size_v, cell_size_rad, num_points_in_tile, uvw);
+    std::vector<int> num_skipped;
+    tile_count_for_indexing<int, double>(grid_size, support, channels, baselines, times, top_left_u, top_left_v, tile_size_u, inv_tile_size_u, inv_tile_size_v, cell_size_rad, freqs, num_skipped, num_points_in_tile, uvw);
     prefix_sum<int>(num_tiles, num_points_in_tile.data(), tile_offsets.data());
     bucket_sorted_indexing<int, double>(grid_size, support, top_left_u, top_left_v, num_tiles_u, cell_size_rad, inv_tile_size_u, inv_tile_size_v, channels, baselines, times, uvw, freqs, vis, tile_offsets, sorted_vis_index);
 }
