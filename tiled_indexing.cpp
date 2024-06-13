@@ -238,10 +238,10 @@ int main()
     // Calculate the inverse of the tile sizes for fast division later
     const float inv_tile_size_u = 1.0/float(tile_size_u);
     const float inv_tile_size_v = 1.0/float(tile_size_v);
-    std::vector<int> num_points_in_tile;
-    std::vector<int> sorted_vis_index;
-    std::vector<int> tile_offsets;
-    std::vector<int> num_skipped;
+    std::vector<int> num_points_in_tile (num_tiles);
+    std::vector<int> sorted_vis_index (baselines * times * channels * num_pol);
+    std::vector<int> tile_offsets (num_tiles + 1);
+    std::vector<int> num_skipped (1);
     tile_count_for_indexing<int, double>(grid_size, support, channels, baselines, times, top_left_u, top_left_v, tile_size_u, inv_tile_size_u, inv_tile_size_v, cell_size_rad, freqs, num_skipped, num_points_in_tile, uvw);
     prefix_sum<int>(num_tiles, num_points_in_tile.data(), tile_offsets.data());
     bucket_sorted_indexing<int, double>(grid_size, support, top_left_u, top_left_v, num_tiles_u, cell_size_rad, inv_tile_size_u, inv_tile_size_v, channels, baselines, times, uvw, freqs, vis, tile_offsets, sorted_vis_index);
