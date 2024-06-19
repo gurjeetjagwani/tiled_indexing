@@ -42,25 +42,26 @@ static void gen_data(
     std::vector<F>& freqs
 )
 {
-    for (T l = 0; l < num_channels; l++)
+    for (T m = 0; m < num_channels; m++)
     {
-        freqs[l] = 1e9 + l * 1e6;               
+        freqs[m] = 1e9 + m * 1e6;               
     }
     for (T i = 0; i < num_times; i++)
     {
         for(T k = 0; k < num_baselines; k++)
-        {        
-            int i_u = INDEX_3D (num_times, num_baselines, 3, i, k, 0);
-            int i_v = INDEX_3D (num_times, num_baselines, 3, i, k, 1);
-            uvw[i_u] = (double)rand() / (double) RAND_MAX;
-            uvw[i_v] = (double)rand() / (double) RAND_MAX; 
-             
+        {   
+            T i_u = INDEX_3D(num_times, num_baselines,2 ,i, k, 0);
+            T i_v = INDEX_3D(num_times, num_baselines,2 ,i, k, 1);
+            
+            uvw[i_u] = (double)rand() / ((double)RAND_MAX + 1) * 50;
+            uvw[i_v] = (double)rand() / ((double)RAND_MAX + 1) * -50;
+            
             for (T l = 0; l < num_channels; l++)
-            {  
+            { 
                 for (T j = 0; j < num_pol; j++)
                 {
-                    vis[j] = 1.0;
-                    weights[j] = 1.0; 
+                vis[j] = 1.0;
+                weights[j] = 1.0; 
                 }
             }
         }
@@ -89,17 +90,16 @@ static void tile_count_for_indexing(
     F grid_scale = grid_size * cell_size_rad;
     for (T i = 0; i < num_times; i++)
     {
-        for(T k = 0; i < num_baselines; k++)
+        for(T k = 0; k < num_baselines; k++)
         {
-            T i_u = INDEX_3D(num_times, num_baselines,3 ,i, k, 0);
-            T i_v = INDEX_3D(num_times, num_baselines,3 ,i, k, 1);
+           T i_u = INDEX_3D(num_times, num_baselines,2 ,i, k, 0);
+           T i_v = INDEX_3D(num_times, num_baselines,2 ,i, k, 1);
+           
            for(int j=0; j < num_channels; j++)
-            { 
-
+            {     
                 F inv_wavelength = freqs[j] / 299792458.0;  
-                F pos_u = i_u * inv_wavelength * grid_scale;
-                F pos_v = i_v * inv_wavelength * grid_scale;
-
+                F pos_u = uv[i_u] * inv_wavelength * grid_scale;
+                F pos_v = uv[i_v] * inv_wavelength * grid_scale;
                 for (int l = 0; l < num_pol; l++)
                 {
                     T grid_u = round(pos_u) + grid_centre;
@@ -160,16 +160,16 @@ static void bucket_sorted_indexing(
     F grid_scale = grid_size * cell_size_rad;
     for (int i = 0; i < num_times; i++)
     {
-        for(int k = 0; i < num_baselines; k++)
+        for(int k = 0; k < num_baselines; k++)
         {   
-            T i_u = INDEX_3D(num_times, num_baselines,3 ,i, k, 0);
-            T i_v = INDEX_3D(num_times, num_baselines,3 ,i, k, 1);
+            T i_u = INDEX_3D(num_times, num_baselines,2 ,i, k, 0);
+            T i_v = INDEX_3D(num_times, num_baselines,2 ,i, k, 1);
             
             for(int j=0; j < num_channels; j++)
             {
                 F inv_wavelength = freqs[j] / 299792458.0;  
-                F pos_u = i_u * inv_wavelength * grid_scale; 
-                F pos_v = i_v * inv_wavelength * grid_scale;
+                F pos_u = uvw[i_u] * inv_wavelength * grid_scale; 
+                F pos_v = uvw[i_v] * inv_wavelength * grid_scale;
 
                 for(int l =0; l < num_pol; l++)
                 {
@@ -209,18 +209,18 @@ static void bucket_sorted_indexing(
 int main()
 {
     //Define parameters for generating dummy visibilities, weights and uv plane
-    int stations = 64;
+    int stations = 6;
     int baselines = stations * (stations -1);
-    int channels = 30;
+    int channels = 2;
     int times = 1;
-    std::vector<double> freqs(channels);
-    std::vector<double> uvw (baselines * times * 3);
-    std::vector<double> vis (baselines * times * channels * num_pol);
-    std::vector<double> weights (baselines * times * channels * num_pol);
-    gen_data<int, double>(baselines,channels,times,vis,weights,uvw,freqs);
+    std::vector<float> freqs(channels);
+    std::vector<float> uvw (baselines * times * 2);
+    std::vector<float> vis (baselines * times * channels * num_pol);
+    std::vector<float> weights (baselines * times * channels * num_pol);
+    gen_data<int, float>(baselines,channels,times,vis,weights,uvw,freqs);
     //Define parameters for the grid and tiles
-    float cell_size_rad = 0.0001;
-    int grid_size = 2048;
+    float cell_size_rad = 4.84814e-5;
+    int grid_size = 800;
     int grid_centre = grid_size / 2;
     int tile_size_u = 32;
     int tile_size_v = 16;
@@ -242,7 +242,7 @@ int main()
     std::vector<int> sorted_vis_index (baselines * times * channels * num_pol);
     std::vector<int> tile_offsets (num_tiles + 1);
     std::vector<int> num_skipped (1);
-    tile_count_for_indexing<int, double>(grid_size, support, channels, baselines, times, top_left_u, top_left_v, tile_size_u, inv_tile_size_u, inv_tile_size_v, cell_size_rad, freqs, num_skipped, num_points_in_tile, uvw);
+    tile_count_for_indexing<int, float>(grid_size, support, channels, baselines, times, top_left_u, top_left_v, tile_size_u, inv_tile_size_u, inv_tile_size_v, cell_size_rad, freqs, num_skipped, num_points_in_tile, uvw);
     prefix_sum<int>(num_tiles, num_points_in_tile.data(), tile_offsets.data());
-    bucket_sorted_indexing<int, double>(grid_size, support, top_left_u, top_left_v, num_tiles_u, cell_size_rad, inv_tile_size_u, inv_tile_size_v, channels, baselines, times, uvw, freqs, vis, tile_offsets, sorted_vis_index);
+    bucket_sorted_indexing<int, float>(grid_size, support, top_left_u, top_left_v, num_tiles_u, cell_size_rad, inv_tile_size_u, inv_tile_size_v, channels, baselines, times, uvw, freqs, vis, tile_offsets, sorted_vis_index);
 }
